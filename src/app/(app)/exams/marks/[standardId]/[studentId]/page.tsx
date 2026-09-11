@@ -1,0 +1,161 @@
+import { notFound } from "next/navigation";
+import { prisma } from "@/lib/db";
+import { PageHeader } from "@/components/page-header";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { MarksSummaryTable } from "@/components/marks-summary-table";
+import { MarksForm } from "./marks-form";
+import { DownloadResultPanel } from "./download-result-panel";
+
+export default async function StudentMarksEntryPage({
+  params,
+  searchParams,
+}: {
+  params: Promise<{ standardId: string; studentId: string }>;
+  searchParams: Promise<{ examId?: string }>;
+}) {
+  const { standardId, studentId } = await params;
+  const { examId: selectedExamId } = await searchParams;
+
+  const student = await prisma.student.findUnique({
+    where: { id: studentId },
+    include: { standard: true },
+  });
+  if (!student || student.standardId !== standardId) notFound();
+
+  const [subjects, exams] = await Promise.all([
+    prisma.subject.findMany({ where: { standardId }, orderBy: { name: "asc" } }),
+    prisma.exam.findMany({ where: { NOT: { isFinal: true } }, orderBy: { examDate: "desc" } }),
+  ]);
+
+  const examId = selectedExamId || exams[0]?.id || "";
+
+  const existingMarks = examId
+    ? await prisma.marks.findMany({
+        where: { studentId, examId },
+        include: { subject: true },
+      })
+    : [];
+  const marksBySubjectId = new Map(existingMarks.map((m) => [m.subjectId, m]));
+
+  // Auto-fill total marks from whatever another student in this standard
+  // already entered for the same subject/exam, so the teacher only has to
+  // type the obtained marks for everyone after the first student.
+  const standardMarks = examId
+    ? await prisma.marks.findMany({
+        where: { examId, subject: { standardId } },
+        orderBy: { updatedAt: "desc" },
+      })
+    : [];
+  const defaultTotalMarksBySubjectId = new Map<string, number>();
+  for (const m of standardMarks) {
+    if (!defaultTotalMarksBySubjectId.has(m.subjectId)) {
+      defaultTotalMarksBySubjectId.set(m.subjectId, m.totalMarks);
+    }
+  }
+
+  const summaryRows = existingMarks.map((m) => ({
+    subjectName: m.subject.name,
+    marksObtained: m.marksObtained,
+    totalMarks: m.totalMarks,
+  }));
+  const totalObtained = summaryRows.reduce((sum, r) => sum + r.marksObtained, 0);
+  const totalMax = summaryRows.reduce((sum, r) => sum + r.totalMarks, 0);
+  const percentage = totalMax > 0 ? (totalObtained / totalMax) * 100 : 0;
+
+  const [markedExams, settings] = await Promise.all([
+    prisma.marks.findMany({
+      where: { studentId },
+      distinct: ["examId"],
+      select: { exam: { select: { id: true, name: true, academicYear: true, isFinal: true } } },
+    }),
+    prisma.schoolSettings.findUnique({ where: { id: "main" } }),
+  ]);
+  const examsByYear = new Map<string, { id: string; name: string }[]>();
+  for (const { exam } of markedExams) {
+    if (exam.isFinal) continue;
+    const year = exam.academicYear || "Unknown";
+    const list = examsByYear.get(year) || [];
+    list.push({ id: exam.id, name: exam.name });
+    examsByYear.set(year, list);
+  }
+  const downloadYears = Array.from(examsByYear.entries())
+    .sort((a, b) => b[0].localeCompare(a[0]))
+    .map(([year, exams]) => ({ year, exams }));
+
+  return (
+    <div>
+      <PageHeader
+        title={`Marks — ${student.name}`}
+        description={`${student.standard.name} · Admission No. ${student.admissionNo}`}
+      />
+
+      {downloadYears.length > 0 && (
+        <div className="mb-6">
+          <DownloadResultPanel
+            studentId={studentId}
+            studentName={student.name}
+            years={downloadYears}
+            schoolName={settings?.name || "School"}
+            address={settings?.address || null}
+            phone={settings?.phone || null}
+          />
+        </div>
+      )}
+
+      <div className="grid gap-6 lg:grid-cols-2">
+        <Card>
+          <CardHeader>
+            <CardTitle>Enter Marks</CardTitle>
+          </CardHeader>
+          <CardContent>
+            {subjects.length === 0 ? (
+              <p className="py-8 text-center text-sm text-muted-foreground">
+                No subjects added for {student.standard.name} yet. Add subjects first.
+              </p>
+            ) : exams.length === 0 ? (
+              <p className="py-8 text-center text-sm text-muted-foreground">
+                No exams created yet. Create one from Set Exam first.
+              </p>
+            ) : (
+              <MarksForm
+                studentId={studentId}
+                standardId={standardId}
+                aadharNumber={student.aadharNumber}
+                subjects={subjects}
+                exams={exams}
+                selectedExamId={examId}
+                existingMarks={Object.fromEntries(
+                  [...marksBySubjectId.entries()].map(([subjectId, m]) => [
+                    subjectId,
+                    { marksObtained: m.marksObtained, totalMarks: m.totalMarks },
+                  ])
+                )}
+                defaultTotalMarks={Object.fromEntries(defaultTotalMarksBySubjectId)}
+              />
+            )}
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <CardTitle>Result Summary</CardTitle>
+          </CardHeader>
+          <CardContent>
+            {summaryRows.length === 0 ? (
+              <p className="py-8 text-center text-sm text-muted-foreground">
+                No marks saved yet for the selected term.
+              </p>
+            ) : (
+              <MarksSummaryTable
+                rows={summaryRows}
+                totalObtained={totalObtained}
+                totalMax={totalMax}
+                percentage={percentage}
+              />
+            )}
+          </CardContent>
+        </Card>
+      </div>
+    </div>
+  );
+}
