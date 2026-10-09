@@ -72,6 +72,9 @@ async function computePendingByStudent() {
       .filter((p) => p.academicYear === student.academicYear)
       .reduce((sum, p) => sum + p.amount, 0);
     const due = Math.max(0, totalFee - totalPaid);
+    // Paid toward this year's fee, capped at the fee (advance beyond it isn't "owed"), so
+    // paid + due === totalFee always.
+    const paid = totalFee - due;
     // Apportion the paid amount across the three components, oldest debt
     // (carried-forward opening balance) first, then standard fee, then bus fee,
     // so all three are shown separately as requested.
@@ -81,7 +84,7 @@ async function computePendingByStudent() {
     const openingDue = Math.max(0, openingBalance - openingPaid);
     const standardDue = Math.max(0, standardFee - standardPaid);
     const busDue = Math.max(0, busFee - busPaid);
-    return { student, totalFee, due, openingDue, standardDue, busDue };
+    return { student, totalFee, paid, due, openingDue, standardDue, busDue };
   });
 
   return pendingByStudent;
@@ -94,6 +97,7 @@ export async function getPendingFeesReport() {
   ]);
 
   const grandTotal = pendingByStudent.reduce((sum, p) => sum + p.due, 0);
+  const grandTotalPaid = pendingByStudent.reduce((sum, p) => sum + p.paid, 0);
   const grandTotalOpening = pendingByStudent.reduce((sum, p) => sum + p.openingDue, 0);
   const grandTotalStandard = pendingByStudent.reduce((sum, p) => sum + p.standardDue, 0);
   const grandTotalBus = pendingByStudent.reduce((sum, p) => sum + p.busDue, 0);
@@ -106,6 +110,7 @@ export async function getPendingFeesReport() {
         id: p.student.id,
         name: p.student.name,
         admissionNo: p.student.admissionNo,
+        paid: p.paid,
         due: p.due,
         openingDue: p.openingDue,
         standardDue: p.standardDue,
@@ -113,10 +118,19 @@ export async function getPendingFeesReport() {
       }))
       .sort((a, b) => b.due - a.due);
     const totalDue = inStandard.reduce((sum, p) => sum + p.due, 0);
-    return { standard, totalDue, students: pendingStudents };
+    // Whole class, including students who have fully paid (not just the pending list).
+    const totalPaid = inStandard.reduce((sum, p) => sum + p.paid, 0);
+    return { standard, totalDue, totalPaid, students: pendingStudents };
   });
 
-  return { grandTotal, grandTotalOpening, grandTotalStandard, grandTotalBus, groups };
+  return {
+    grandTotal,
+    grandTotalPaid,
+    grandTotalOpening,
+    grandTotalStandard,
+    grandTotalBus,
+    groups,
+  };
 }
 
 /** Total fees owed by all active students, split into what's been collected toward that

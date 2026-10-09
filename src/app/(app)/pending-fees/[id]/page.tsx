@@ -17,7 +17,7 @@ export default async function PendingFeesByStandardPage({
   const group = groups.find((g) => g.standard.id === id);
   if (!group) notFound();
 
-  const { standard, totalDue, students } = group;
+  const { standard, totalDue, totalPaid, students } = group;
 
   return (
     <div>
@@ -32,9 +32,15 @@ export default async function PendingFeesByStandardPage({
       />
 
       <Card className="mb-6 border-t-2 border-t-destructive">
-        <CardContent>
-          <p className="text-xs text-muted-foreground">Total Pending — Standard {standard.name}</p>
-          <p className="mt-1 text-3xl font-bold text-destructive">{formatCurrency(totalDue)}</p>
+        <CardContent className="flex flex-wrap items-end gap-x-8 gap-y-2">
+          <div>
+            <p className="text-xs text-muted-foreground">Total Pending — Standard {standard.name}</p>
+            <p className="mt-1 text-3xl font-bold text-destructive">{formatCurrency(totalDue)}</p>
+          </div>
+          <div>
+            <p className="text-xs text-muted-foreground">Total Paid — Standard {standard.name}</p>
+            <p className="mt-1 text-xl font-semibold text-success">{formatCurrency(totalPaid)}</p>
+          </div>
         </CardContent>
       </Card>
 
@@ -45,6 +51,13 @@ export default async function PendingFeesByStandardPage({
           </p>
         ) : (
           <div className="divide-y divide-border">
+            <div className="flex items-center justify-between gap-3 bg-muted/40 px-4 py-2 text-xs font-medium text-muted-foreground">
+              <span>Student</span>
+              <div className="flex items-center gap-2">
+                <span className="min-w-24 text-right sm:min-w-32">Paid</span>
+                <span className="min-w-24 text-right sm:min-w-32">Pending</span>
+              </div>
+            </div>
             {students.map((s) => (
               <Link
                 key={s.id}
@@ -60,9 +73,14 @@ export default async function PendingFeesByStandardPage({
                     {s.busDue > 0 && <> · Bus: {formatCurrency(s.busDue)}</>}
                   </p>
                 </div>
-                <span className="shrink-0 font-semibold text-destructive">
-                  {formatCurrency(s.due)}
-                </span>
+                <div className="flex shrink-0 items-center gap-2">
+                  <span className="min-w-24 whitespace-nowrap text-right text-sm font-semibold text-success sm:min-w-32 sm:text-base">
+                    {formatCurrency(s.paid)}
+                  </span>
+                  <span className="min-w-24 whitespace-nowrap text-right text-sm font-semibold text-destructive sm:min-w-32 sm:text-base">
+                    {formatCurrency(s.due)}
+                  </span>
+                </div>
               </Link>
             ))}
           </div>
