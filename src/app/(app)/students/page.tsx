@@ -134,6 +134,10 @@ export default async function StudentsPage({
                           <dt className="text-muted-foreground">Father&apos;s Name</dt>
                           <dd className="font-medium">{s.fatherName || "-"}</dd>
                         </div>
+                        <div className="col-span-2">
+                          <dt className="text-muted-foreground">Fees Paid</dt>
+                          <dd className="font-medium text-success">{formatCurrency(sum?.totalPaid ?? 0)}</dd>
+                        </div>
                       </dl>
                       <div className="mt-3 flex items-center justify-between gap-2">
                         {sum && sum.due > 0 ? (
@@ -167,6 +171,7 @@ export default async function StudentsPage({
                     <TableHead>Father&apos;s Name</TableHead>
                     <TableHead>Phone</TableHead>
                     <TableHead>Fee Status</TableHead>
+                    <TableHead className="text-right">Paid</TableHead>
                     <TableHead>Status</TableHead>
                     <TableHead className="text-right">Action</TableHead>
                   </TableRow>
@@ -193,6 +198,9 @@ export default async function StudentsPage({
                           ) : (
                             <Badge variant="success">Paid</Badge>
                           )}
+                        </TableCell>
+                        <TableCell className="text-right font-medium text-success">
+                          {formatCurrency(sum?.totalPaid ?? 0)}
                         </TableCell>
                         <TableCell>
                           <Badge variant={s.status === "ACTIVE" ? "success" : "outline"}>
